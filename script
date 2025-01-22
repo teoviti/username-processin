@@ -1,0 +1,234 @@
+// Variabile per interrompere lo script
+let stopScript = false;
+
+// Lista di username da processare (può essere dinamica)
+const usernames = ['utente1', 'utente2', 'utente3'];
+
+// Configurazione
+const config = {
+    maxAttempts: 10, // Numero massimo di tentativi per ogni username
+    initialDelay: 3000, // Ritardo iniziale prima di processare ogni username
+    pauseAfter: 250, // Numero di follower dopo cui fare una pausa breve
+    longPauseAfter: 500, // Numero di follower dopo cui fare una pausa lunga
+    minPause: 180000, // Pausa breve minima in millisecondi (3 minuti)
+    maxPause: 300000, // Pausa breve massima in millisecondi (5 minuti)
+    minLongPause: 300000, // Pausa lunga minima in millisecondi (4 minuti)
+    maxLongPause: 520000 // Pausa lunga massima in millisecondi (7 minuti)
+};
+
+// Variabili per il conteggio e i risultati
+let notFoundUsernames = [];
+let notAddedUsernames = [];
+let addedCount = 0;
+let notAddedCount = 0;
+
+// Funzione per salvare lo stato nel localStorage
+function saveState(index) {
+    const state = {
+        index,
+        addedCount,
+        notAddedCount,
+        notFoundUsernames,
+    };
+    localStorage.setItem('scriptState', JSON.stringify(state));
+    console.log(`Stato salvato: indice ${index}, aggiunti: ${addedCount}, non aggiunti: ${notAddedCount}, non trovati: ${notFoundUsernames.length}`);
+}
+
+// Funzione per caricare lo stato dal localStorage
+function loadState() {
+    const savedState = localStorage.getItem('scriptState');
+    if (savedState) {
+        return JSON.parse(savedState);
+    }
+    return null;
+}
+
+// Funzione per eliminare lo stato dal localStorage
+function clearState() {
+    localStorage.removeItem('scriptState');
+    console.log("Stato salvato eliminato.");
+}
+
+// Funzione per trovare la barra di ricerca
+function findSearchInput() {
+    return document.querySelector('input[data-bloks-name="bk.components.TextInput"][placeholder="Cerca"]');
+}
+
+// Funzione per simulare il movimento del mouse
+function simulateMouseMovement(element) {
+    const rect = element.getBoundingClientRect();
+    const xStart = Math.random() * rect.width + rect.left;
+    const yStart = Math.random() * rect.height + rect.top;
+    const xEnd = Math.random() * rect.width + rect.left;
+    const yEnd = Math.random() * rect.height + rect.top;
+
+    element.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: xStart, clientY: yStart }));
+    element.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, clientX: xEnd, clientY: yEnd }));
+}
+
+// Funzione asincrona per attendere un periodo di tempo
+function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Funzione per verificare se il caricamento è in corso
+function isLoading() {
+    return document.querySelector('div[data-visualcompletion="loading-state"]') !== null;
+}
+
+// Funzione per aspettare che il caricamento finisca
+async function waitForLoadingToFinish(timeout = 10000) {
+    const startTime = Date.now();
+    while (isLoading()) {
+        if (Date.now() - startTime > timeout) {
+            console.warn("Timeout superato durante l'attesa del caricamento.");
+            break;
+        }
+        if (stopScript) {
+            console.log("Script interrotto manualmente durante il caricamento.");
+            return;
+        }
+        console.log("%c Caricamento in corso...", 'color: lightgray');
+        await sleep(500);
+    }
+}
+
+// Funzione per trovare e cliccare sul nome utente corretto
+function clickCorrectUser(username) {
+    const userElements = document.querySelectorAll('div[data-bloks-name="bk.components.Flexbox"]');
+    let userFound = false;
+
+    userElements.forEach((userElement) => {
+        try {
+            const displayedUsernameElement = userElement.querySelector('span[data-bloks-name="bk.components.Text"]');
+            if (!displayedUsernameElement) return;
+
+            const displayedUsername = displayedUsernameElement.innerText.trim().toLowerCase();
+            if (displayedUsername === username.toLowerCase()) {
+                userFound = true;
+
+                const circleButton = userElement.querySelector('div[data-bloks-name="ig.components.Icon"]');
+                if (circleButton) {
+                    const isAlreadyClicked = circleButton.style.maskImage.includes("circle-check__filled__24-4x.png");
+                    if (isAlreadyClicked) {
+                        notAddedUsernames.push(username);
+                        notAddedCount++;
+                        console.log(`%c Utente già presente negli amici stretti: ${username}`, 'color: yellow');
+                    } else {
+                        simulateMouseMovement(circleButton);
+                        circleButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+                        addedCount++;
+                        console.log(`%c Utente aggiunto agli amici stretti: ${username}`, 'color: green');
+                    }
+                }
+            }
+        } catch (err) {
+            console.error(`Errore durante l'elaborazione: ${err.message}`);
+        }
+    });
+
+    return userFound;
+}
+
+// Funzione per processare gli username uno alla volta
+async function processUsernamesSequentially(usernames, index = 0) {
+    if (stopScript) {
+        console.log("Script interrotto manualmente.");
+        return;
+    }
+
+    if (index >= usernames.length) {
+        console.log("Tutti gli username sono stati processati o verificati!");
+        notifyCompletion();
+        return;
+    }
+
+    // Pausa breve ogni 250 follower
+    if (index > 0 && index % config.pauseAfter === 0 && index % config.longPauseAfter !== 0) {
+        const pauseTime = Math.random() * (config.maxPause - config.minPause) + config.minPause;
+        saveState(index);
+        console.clear();
+        console.log(`Pausa breve di ${pauseTime / 1000} secondi iniziata dopo ${index} follower processati.`);
+        console.log(`Riepilogo parziale: Aggiunti: ${addedCount}, Non aggiunti: ${notAddedCount}, Non trovati: ${notFoundUsernames.length}`);
+        await sleep(pauseTime);
+    }
+
+    // Pausa lunga e ricaricamento ogni 500 follower
+    if (index > 0 && index % config.longPauseAfter === 0) {
+        const pauseTime = Math.random() * (config.maxLongPause - config.minLongPause) + config.minLongPause;
+        saveState(index);
+        console.clear();
+        console.log(`Pausa lunga di ${pauseTime / 1000} secondi iniziata dopo ${index} follower processati.`);
+        console.log("Ricaricamento della pagina in corso...");
+        window.location.reload(true);
+        return;
+    }
+
+    let username = usernames[index];
+    console.log(`Sto processando: ${username} (${index + 1} di ${usernames.length})`);
+
+    const search = findSearchInput();
+    if (!search) {
+        console.error("Barra di ricerca non trovata!");
+        return;
+    }
+
+    let attempts = 0;
+    let shortenedUsername = username;
+
+    while (attempts < config.maxAttempts) {
+        if (stopScript) {
+            console.log("Script interrotto manualmente durante i tentativi.");
+            return;
+        }
+
+        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+        nativeInputValueSetter.call(search, shortenedUsername);
+        search.dispatchEvent(inputEvent);
+
+        await sleep(config.initialDelay + Math.random() * 2000);
+        await waitForLoadingToFinish();
+
+        const userFound = clickCorrectUser(username);
+        if (userFound) {
+            break;
+        }
+
+        attempts++;
+        if (shortenedUsername.length > 5) {
+            shortenedUsername = shortenedUsername.slice(0, -1);
+            console.log(`Nuovo tentativo con username abbreviato: ${shortenedUsername}`);
+        } else {
+            shortenedUsername = username;
+            console.log(`Ripristinato username completo: ${username}`);
+        }
+
+        if (attempts >= config.maxAttempts) {
+            notFoundUsernames.push(username);
+            console.error(`Utente non trovato dopo ${config.maxAttempts} tentativi: ${username}`);
+        }
+    }
+
+    await processUsernamesSequentially(usernames, index + 1);
+}
+
+// Notifica al completamento
+function notifyCompletion() {
+    console.log("%c Script completato con successo!", 'color: blue; font-weight: bold;');
+    console.log(`Follower aggiunti: ${addedCount}`);
+    console.log(`Follower non aggiunti: ${notAddedCount}`);
+    console.log(`Follower non trovati: ${notFoundUsernames.length}`);
+    console.log("Follower non trovati:", notFoundUsernames);
+    console.log("Follower non aggiunti:", notAddedUsernames);
+    alert(`Script completato! Follower aggiunti: ${addedCount}, non aggiunti: ${notAddedCount}, non trovati: ${notFoundUsernames.length}`);
+    clearState();
+}
+
+// Recupera lo stato salvato (se esiste)
+const savedState = loadState();
+if (savedState) {
+    console.log(`Ripresa dello script dal follower ${savedState.index + 1}`);
+    addedCount = savedState.addedCount;
+    notAddedCount = savedState.notAddedCount;
+    notFoundUsernames = savedState.notFoundUsernames;
+    processUsernamesSequentially
