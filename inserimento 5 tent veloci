@@ -1,0 +1,217 @@
+// Variabile per interrompere lo script
+let stopScript = false;
+
+// Configurazione
+const config = {
+    maxAttempts: 5, // Numero massimo di tentativi per ogni username (modificato da 10 a 5)
+    initialDelay: 3000, // Ritardo iniziale prima di processare ogni username
+    clearConsoleAfter: 20 // Numero di username processati prima di pulire la console
+};
+
+// Evento di input per simulare la scrittura
+const inputEvent = new Event('input', { bubbles: true });
+
+// Variabile per mantenere la lista di username caricati dal CSV
+let usernames = [];
+let processedCount = 0; // Conta il numero di username processati
+
+// Funzione per trovare la barra di ricerca
+function findSearchInput() {
+    return document.querySelector('input[data-bloks-name="bk.components.TextInput"][placeholder="Cerca"]');
+}
+
+// Funzione per simulare il movimento del mouse
+function simulateMouseMovement(element) {
+    const rect = element.getBoundingClientRect();
+    const xStart = Math.random() * rect.width + rect.left;
+    const yStart = Math.random() * rect.height + rect.top;
+    const xEnd = Math.random() * rect.width + rect.left;
+    const yEnd = Math.random() * rect.height + rect.top;
+
+    element.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: xStart, clientY: yStart }));
+    element.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, clientX: xEnd, clientY: yEnd }));
+}
+
+// Funzione per verificare se il caricamento è in corso
+function isLoading() {
+    return document.querySelector('div[data-visualcompletion="loading-state"]') !== null;
+}
+
+// Funzione per aspettare che il caricamento finisca
+async function waitForLoadingToFinish() {
+    while (isLoading()) {
+        if (stopScript) {
+            console.log("Script interrotto manualmente durante il caricamento.");
+            return Promise.resolve();
+        }
+        console.log("%c Caricamento in corso...", 'color: lightgray');
+        await sleep(500); // Controlla ogni 500ms
+    }
+}
+
+// Funzione per trovare e cliccare sul nome utente corretto
+function clickCorrectUser(username) {
+    const userElements = document.querySelectorAll('div[data-bloks-name="bk.components.Flexbox"]');
+    let userFound = false;
+
+    userElements.forEach((userElement) => {
+        try {
+            const displayedUsernameElement = userElement.querySelector('span[data-bloks-name="bk.components.Text"]');
+            if (!displayedUsernameElement) return;
+
+            const displayedUsername = displayedUsernameElement.innerText.trim().toLowerCase();
+            if (displayedUsername === username.toLowerCase()) {
+                userFound = true;
+
+                const circleButton = userElement.querySelector('div[data-bloks-name="ig.components.Icon"]');
+                if (circleButton) {
+                    const isAlreadyClicked = circleButton.style.maskImage.includes("circle-check__filled__24-4x.png");
+                    if (isAlreadyClicked) {
+                        console.log(`%c Utente già processato: ${username}`, 'color: yellow');
+                    } else {
+                        simulateMouseMovement(circleButton); // Movimento del mouse
+                        circleButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+                        console.log(`%c Utente aggiunto a amici stretti: ${username}`, 'color: green');
+                    }
+                }
+            }
+        } catch (err) {
+            console.error(`Errore durante l'elaborazione: ${err.message}`);
+        }
+    });
+
+    return userFound;
+}
+
+// Funzione asincrona per attendere un periodo di tempo
+function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Funzione per pulire username da punteggiature non desiderate
+function cleanUsername(username) {
+    const cleaned = username.replace(/[;,\s]+$/g, '').trim(); // Rimuove punti e virgola, virgole e spazi alla fine
+    console.debug(`Username originale: "${username}", pulito: "${cleaned}"`);
+    return cleaned;
+}
+
+// Funzione per processare gli username uno alla volta
+async function processUsernamesSequentially(usernames, index = 0) {
+    if (stopScript) {
+        console.log("Script interrotto manualmente.");
+        return Promise.resolve();
+    }
+
+    // Verifica se abbiamo raggiunto la fine della lista
+    if (index >= usernames.length) {
+        console.log("Tutti gli username sono stati processati o verificati!");
+        return;
+    }
+
+    let username = cleanUsername(usernames[index]); // Pulisce l'username
+    console.log(`Sto processando: ${username} (${index + 1} di ${usernames.length}, ne rimangono ${usernames.length - index - 1})`);
+
+    const search = findSearchInput();
+    if (!search) {
+        console.error("Barra di ricerca non trovata!");
+        return;
+    }
+
+    let attempts = 0;
+    let shortenedUsername = username;
+
+    while (attempts < config.maxAttempts) {
+        if (stopScript) {
+            console.log("Script interrotto manualmente durante i tentativi.");
+            return Promise.resolve();
+        }
+
+        // Inserisci il nome utente nella barra di ricerca
+        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+        nativeInputValueSetter.call(search, shortenedUsername);
+        search.dispatchEvent(inputEvent);
+
+        // Aspetta un ritardo iniziale prima del tentativo
+        await sleep(config.initialDelay);
+
+        // Attendi il completamento del caricamento
+        await waitForLoadingToFinish();
+
+        // Cerca e clicca l'username completo
+        const userFound = clickCorrectUser(username);
+        if (userFound) {
+            processedCount++;
+            // Pulizia console ogni 20 utenti processati
+            if (processedCount % config.clearConsoleAfter === 0) {
+                console.clear();
+                console.log(`Console pulita. Utenti processati finora: ${processedCount}`);
+            }
+            break;
+        }
+
+        attempts++;
+        if (attempts === 1 || attempts === 3) {
+            shortenedUsername = shortenedUsername.slice(0, -1); // Togli una lettera
+            console.log(`Nuovo tentativo con username abbreviato: ${shortenedUsername}`);
+        } else if (attempts === 2 || attempts === 4) {
+            shortenedUsername = username; // Ripristina username completo
+            console.log(`Ripristinato username completo: ${username}`);
+        }
+
+        if (attempts === config.maxAttempts) {
+            console.error(`Utente non trovato dopo ${config.maxAttempts} tentativi: ${username}`);
+            // Seleziona il primo utente disponibile nella barra di ricerca con il pallino non blu
+            const userElements = document.querySelectorAll('div[data-bloks-name="bk.components.Flexbox"]');
+            let clicked = false;
+
+            userElements.forEach(userElement => {
+                if (clicked) return; // Esci dal loop se un utente è già stato cliccato
+
+                const circleButton = userElement.querySelector('div[data-bloks-name="ig.components.Icon"]');
+                if (circleButton && !circleButton.style.maskImage.includes("circle-check__filled__24-4x.png")) {
+                    simulateMouseMovement(circleButton); // Movimento del mouse
+                    circleButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+                    console.log(`%c Selezionato utente disponibile: ${username}`, 'color: green');
+                    clicked = true;
+                }
+            });
+
+            if (!clicked) {
+                console.error("Nessun utente con pallino disponibile trovato.");
+            }
+        }
+    }
+
+    // Passa al prossimo username
+    await processUsernamesSequentially(usernames, index + 1);
+}
+
+// Funzione per caricare un file CSV
+function loadCSVFile(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function (e) {
+        const content = e.target.result;
+        usernames = content.split('\n').map(line => cleanUsername(line.trim())).filter(Boolean); // Estrai e pulisci gli username
+        console.log("Usernames caricati:", usernames);
+        processUsernamesSequentially(usernames);
+    };
+    reader.readAsText(file);
+}
+
+// Aggiungi un input visibile per caricare il file
+const input = document.createElement('input');
+input.type = 'file';
+input.accept = '.csv';
+input.style.position = 'fixed';
+input.style.top = '10px';
+input.style.left = '10px';
+input.style.zIndex = '1000';
+input.style.padding = '10px';
+input.style.border = '2px solid black';
+input.style.backgroundColor = 'white';
+input.addEventListener('change', loadCSVFile);
+document.body.appendChild(input);
+console.log("Carica il file CSV tramite il pulsante ben visibile in alto a sinistra.");
