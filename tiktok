@@ -1,0 +1,85 @@
+async function performActions() {
+    function wait(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    function simulateMouseClick(element) {
+        if (element) {
+            const rect = element.getBoundingClientRect();
+            const x = rect.left + (rect.width / 2);
+            const y = rect.top + (rect.height / 2);
+
+            element.dispatchEvent(new MouseEvent("mouseover", { bubbles: true, clientX: x, clientY: y }));
+            element.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, clientX: x, clientY: y }));
+            element.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, clientX: x, clientY: y }));
+            element.click();
+        }
+    }
+
+    console.log("🔹 Avvio delle azioni...");
+
+    // 1️⃣ Copia il link del video
+    let copyButton = document.querySelector('button[data-e2e="browse-copy"]');
+    if (!copyButton) {
+        copyButton = document.querySelector('button:has(svg use[xlink\\:href*="share"])');
+    }
+    if (copyButton) {
+        console.log("✅ Copiando il link...");
+        simulateMouseClick(copyButton);
+        await wait(2000);
+    } else {
+        console.warn("❌ Pulsante 'Copia il link' non trovato!");
+    }
+
+    // 2️⃣ Salva il video (Aggiungere ai preferiti)
+    let saveButton = document.querySelector('span[data-e2e="undefined-icon"], span[data-e2e="bookmark-icon"]');
+
+    // 🔹 Se non trova il pulsante standard, prova altre varianti
+    if (!saveButton) {
+        saveButton = document.querySelector('svg use[xlink\\:href*="favorite"]');
+    }
+    if (!saveButton) {
+        saveButton = document.querySelector('svg use[xlink\\:href*="favorite-f29ef602"]'); // Variante dell'icona
+    }
+    if (!saveButton) {
+        saveButton = document.querySelector('path[fill="#FACE15"]'); // Variante colore giallo
+    }
+    if (!saveButton) {
+        saveButton = document.querySelector('path[fill-opacity=".03"]'); // Variante ombra nera
+    }
+    if (!saveButton) {
+        saveButton = document.querySelector('div:has(svg use[xlink\\:href*="favorite"])'); // Cerca nei div
+    }
+    if (!saveButton) {
+        saveButton = document.querySelector('button:has(svg use[xlink\\:href*="favorite"])'); // Cerca nei bottoni
+    }
+
+    if (saveButton) {
+        console.log("✅ Salvando il video...");
+        simulateMouseClick(saveButton.closest('span, button, div')); // Trova il container cliccabile
+        await wait(2000);
+    } else {
+        console.warn("❌ Pulsante 'Salva' non trovato! Verifica l'icona.");
+    }
+
+    // 3️⃣ Metti like al video
+    let likeButton = document.querySelector('span[data-e2e="browse-like-icon"]');
+
+    // 🔹 Se non trova il pulsante standard, cerca icone simili nel DOM
+    if (!likeButton) {
+        likeButton = document.querySelector('svg use[xlink\\:href*="heart"]');
+    }
+
+    if (likeButton) {
+        console.log("✅ Mettendo like...");
+        simulateMouseClick(likeButton.closest('span, button, div'));
+        await wait(2000);
+    } else {
+        console.warn("❌ Pulsante 'Like' non trovato!");
+    }
+
+    console.log("🎯 Azioni completate con successo!");
+}
+
+// 🔥 Avvia il bot
+performActions();
